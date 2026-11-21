@@ -1,0 +1,149 @@
+name: Delete approved repositories (keep Void)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type DELETE THE 47 APPROVED REPOSITORIES'
+        required: true
+        type: string
+        default: 'NO'
+
+permissions:
+  contents: read
+
+jobs:
+  delete-approved:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete only the approved repository list
+        env:
+          GH_TOKEN: ${{ secrets.GH_DELETE_TOKEN }}
+          CONFIRM: ${{ inputs.confirmation }}
+        run: |
+          python3 - <<'PY'
+          import os, json, urllib.request, urllib.error, sys
+
+          OWNER = "hpsclip"
+          KEEP = "Void"
+          PHRASE = "DELETE THE 47 APPROVED REPOSITORIES"
+          TARGETS = [
+              "-APEX-DRIFT",
+              "-Vortex.io",
+              "2-player-car-drifting-game",
+              "2D-Arena-Survival-Shooter",
+              "AIRPORT-SIMULATOR",
+              "BLACKOUT-V1",
+              "botttttttttttttttttttttttttttttttttttttttttttttttttttttttt",
+              "br-br-br-bapamin",
+              "cookie-clicker-made-by-hpsclip_fn-",
+              "Croshairs-",
+              "DEEPCORE",
+              "dingus",
+              "DIscord-bot-made-by-hpsclip_fn",
+              "discord-theme-studio",
+              "DON-T-TURN-AROUND",
+              "doze-app",
+              "drift",
+              "HP-shooter",
+              "Hpsclip_fn",
+              "Hpsclip_fn-website",
+              "Info",
+              "jarvis",
+              "MIDNIGHT-RIDE",
+              "multiplayer-game",
+              "my-first-app",
+              "nentendo-switch-clicker",
+              "NEON-CITY-TYCOON",
+              "NXT-Discord-Bot",
+              "NXT50-The-Run",
+              "NXT50-The-Runn",
+              "Off-balance-v1",
+              "Off-balance-V2-full-release",
+              "Off-balance-v3",
+              "One-wheelie",
+              "Project-Apex-",
+              "sad-discord-theme",
+              "SKYLINE",
+              "STORMTRACE",
+              "streak-bot",
+              "sui",
+              "Test",
+              "Testing",
+              "the-one-and-only-",
+              "Uhm",
+              "usele",
+              "Virus-Empire",
+              "Vortex.io"
+          ]
+
+          token = os.environ.get("GH_TOKEN", "")
+          if not token:
+              sys.exit("Missing GH_DELETE_TOKEN secret.")
+
+          def api(path, method="GET"):
+              req = urllib.request.Request(
+                  "https://api.github.com" + path,
+                  headers={
+                      "Authorization": "Bearer " + token,
+                      "Accept": "application/vnd.github+json",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                      "User-Agent": "approved-repository-cleanup"
+                  },
+                  method=method
+              )
+              try:
+                  with urllib.request.urlopen(req) as response:
+                      body = response.read()
+                      return json.loads(body) if body else {}
+              except urllib.error.HTTPError as e:
+                  detail = e.read().decode("utf-8", "replace")
+                  raise RuntimeError(f"GitHub API {e.code}: {detail}")
+
+          me = api("/user")
+          if me.get("login", "").lower() != OWNER.lower():
+              sys.exit("STOP: authenticated account is not hpsclip.")
+
+          if len(TARGETS) != 47 or len(set(TARGETS)) != 47:
+              sys.exit("STOP: approved target list failed validation.")
+          if any(name.lower() == KEEP.lower() for name in TARGETS):
+              sys.exit("STOP: protected Void repository appears in deletion list.")
+
+          if os.environ.get("CONFIRM") != PHRASE:
+              print("PREVIEW ONLY — nothing deleted.")
+              print("Protected repository: hpsclip/Void")
+              print("Would delete these 47 approved repositories:")
+              for name in TARGETS:
+                  print(" - hpsclip/" + name)
+              sys.exit(0)
+
+          # Verify all approved targets still exist and belong to hpsclip before deleting.
+          existing = {}
+          page = 1
+          while True:
+              batch = api(f"/user/repos?affiliation=owner&per_page=100&page={page}")
+              if not batch:
+                  break
+              for repo in batch:
+                  if repo.get("owner", {}).get("login", "").lower() == OWNER.lower():
+                      existing[repo["name"].lower()] = repo
+              page += 1
+
+          if KEEP.lower() not in existing:
+              sys.exit("STOP: hpsclip/Void not found; nothing deleted.")
+
+          missing = [n for n in TARGETS if n.lower() not in existing]
+          if missing:
+              sys.exit("STOP: approved list no longer matches account. Missing: " + ", ".join(missing))
+
+          print("Verified account:", OWNER)
+          print("Protected:", existing[KEEP.lower()]["full_name"])
+          for name in TARGETS:
+              repo = existing[name.lower()]
+              if repo.get("owner", {}).get("login", "").lower() != OWNER.lower():
+                  sys.exit("STOP: owner mismatch for " + name)
+              api("/repos/" + OWNER + "/" + repo["name"], method="DELETE")
+              print("DELETED:", repo["full_name"])
+
+          print("Finished. hpsclip/Void was not targeted.")
+          PY
